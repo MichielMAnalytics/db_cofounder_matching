@@ -12,3 +12,6 @@ env/
 *.swo
 chromedriver
 geckodriver
+
+
+secrets.toml

@@ -110,12 +110,18 @@ def main():
     status_options = ['All'] + list(df['status'].unique()) if 'status' in df.columns else ['All']
     selected_status = st.sidebar.selectbox("Team Status", status_options)
     
-    # Founder type filter
-    if 'founder_type' in df.columns:
-        founder_type_options = ['All'] + sorted(df['founder_type'].dropna().unique().tolist())
-        selected_founder_type = st.sidebar.selectbox("Founder Type", founder_type_options)
+    # Antler cofounder type filter
+    if 'antler_cofounder_type' in df.columns:
+        # Extract all unique types from the arrays
+        all_types = []
+        for types in df['antler_cofounder_type'].dropna():
+            if isinstance(types, list):
+                all_types.extend(types)
+        unique_types = sorted(list(set(all_types)))
+        antler_type_options = ['All'] + unique_types
+        selected_antler_type = st.sidebar.selectbox("Antler Cofounder Type", antler_type_options)
     else:
-        selected_founder_type = 'All'
+        selected_antler_type = 'All'
     
     # Location filter
     if 'location' in df.columns:
@@ -128,8 +134,12 @@ def main():
     filtered_df = df.copy()
     if selected_status != 'All' and 'status' in df.columns:
         filtered_df = filtered_df[filtered_df['status'] == selected_status]
-    if selected_founder_type != 'All' and 'founder_type' in df.columns:
-        filtered_df = filtered_df[filtered_df['founder_type'] == selected_founder_type]
+    if selected_antler_type != 'All' and 'antler_cofounder_type' in df.columns:
+        # Filter based on array containing the selected type
+        mask = filtered_df['antler_cofounder_type'].apply(
+            lambda x: selected_antler_type in x if isinstance(x, list) else False
+        )
+        filtered_df = filtered_df[mask]
     if selected_location != 'All' and 'location' in df.columns:
         filtered_df = filtered_df[filtered_df['location'] == selected_location]
     
@@ -145,13 +155,19 @@ def main():
             st.metric("Looking for Cofounder", looking_count)
     
     with col3:
-        if 'founder_type' in df.columns:
-            technical_count = len(filtered_df[filtered_df['founder_type'] == 'technical'])
-            st.metric("Technical Founders", technical_count)
+        if 'antler_cofounder_type' in df.columns:
+            tech_mask = filtered_df['antler_cofounder_type'].apply(
+                lambda x: 'Technology' in x if isinstance(x, list) else False
+            )
+            technical_count = tech_mask.sum()
+            st.metric("Technology Founders", technical_count)
     
     with col4:
-        if 'founder_type' in df.columns:
-            business_count = len(filtered_df[filtered_df['founder_type'] == 'business'])
+        if 'antler_cofounder_type' in df.columns:
+            biz_mask = filtered_df['antler_cofounder_type'].apply(
+                lambda x: 'Business' in x if isinstance(x, list) else False
+            )
+            business_count = biz_mask.sum()
             st.metric("Business Founders", business_count)
     
     with col5:
@@ -191,26 +207,36 @@ def main():
                 st.info("Status information not available")
         
         with col2:
-            # Founder type distribution bar chart
-            st.subheader("Founder Type Distribution")
-            if 'founder_type' in df.columns:
-                founder_type_counts = filtered_df['founder_type'].value_counts()
-                fig_founder_type = px.bar(
-                    x=founder_type_counts.index,
-                    y=founder_type_counts.values,
-                    labels={'x': 'Founder Type', 'y': 'Count'},
-                    color=founder_type_counts.index,
-                    color_discrete_map={
-                        'technical': '#8B5CF6',  # Purple for technical
-                        'business': '#F59E0B'    # Orange for business
-                    },
-                    text=founder_type_counts.values
-                )
-                fig_founder_type.update_traces(texttemplate='%{text}', textposition='outside')
-                fig_founder_type.update_layout(showlegend=False, height=400)
-                st.plotly_chart(fig_founder_type, use_container_width=True)
+            # Antler Cofounder type distribution bar chart
+            st.subheader("Antler Cofounder Type Distribution")
+            if 'antler_cofounder_type' in df.columns:
+                # Count occurrences of each type across all arrays
+                type_counts = {}
+                for types in filtered_df['antler_cofounder_type'].dropna():
+                    if isinstance(types, list):
+                        for t in types:
+                            type_counts[t] = type_counts.get(t, 0) + 1
+                
+                if type_counts:
+                    fig_founder_type = px.bar(
+                        x=list(type_counts.keys()),
+                        y=list(type_counts.values()),
+                        labels={'x': 'Antler Cofounder Type', 'y': 'Count'},
+                        color=list(type_counts.keys()),
+                        color_discrete_map={
+                            'Technology': '#8B5CF6',  # Purple for Technology
+                            'Business': '#F59E0B',    # Orange for Business
+                            'Domain': '#10B981'       # Green for Domain
+                        },
+                        text=list(type_counts.values())
+                    )
+                    fig_founder_type.update_traces(texttemplate='%{text}', textposition='outside')
+                    fig_founder_type.update_layout(showlegend=False, height=400)
+                    st.plotly_chart(fig_founder_type, use_container_width=True)
+                else:
+                    st.info("No Antler cofounder type data available")
             else:
-                st.info("Founder type information not available")
+                st.info("Antler cofounder type information not available")
         
         with col3:
             # Location distribution
@@ -237,66 +263,78 @@ def main():
         st.subheader("🤝 Available for Cofounder Matching")
         
         # Center the chart in a single column
-        if 'status' in df.columns and 'founder_type' in df.columns:
+        if 'status' in df.columns and 'antler_cofounder_type' in df.columns:
             # Filter for those looking for cofounders
             looking_df = filtered_df[filtered_df['status'] == 'Looking for co-founder']
             
             if len(looking_df) > 0:
-                looking_founder_types = looking_df['founder_type'].value_counts()
+                # Count antler cofounder types among those looking for cofounders
+                type_counts = {}
+                for types in looking_df['antler_cofounder_type'].dropna():
+                    if isinstance(types, list):
+                        for t in types:
+                            type_counts[t] = type_counts.get(t, 0) + 1
                 
-                fig_looking = px.bar(
-                    x=looking_founder_types.index,
-                    y=looking_founder_types.values,
-                    labels={'x': 'Founder Type', 'y': 'Count'},
-                    title="Technical vs Business Founders Looking for Cofounders",
-                    color=looking_founder_types.index,
-                    color_discrete_map={
-                        'technical': '#8B5CF6',  # Purple for technical
-                        'business': '#F59E0B'    # Orange for business
-                    },
-                    text=looking_founder_types.values
-                )
-                fig_looking.update_traces(texttemplate='%{text}', textposition='outside')
-                fig_looking.update_layout(showlegend=False, height=400)
-                st.plotly_chart(fig_looking, use_container_width=True)
-                
-                # Show percentages and matching insights in columns
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.markdown("**📊 Breakdown:**")
-                    total_looking = len(looking_df)
-                    for founder_type, count in looking_founder_types.items():
-                        percentage = (count / total_looking * 100) if total_looking > 0 else 0
-                        st.write(f"• **{founder_type.title()}**: {count} founders ({percentage:.1f}%)")
-                
-                with col2:
-                    st.markdown("**🎯 Matching Opportunities:**")
-                    if len(looking_founder_types) >= 2:
-                        tech_count = looking_founder_types.get('technical', 0)
-                        biz_count = looking_founder_types.get('business', 0)
+                if type_counts:
+                    fig_looking = px.bar(
+                        x=list(type_counts.keys()),
+                        y=list(type_counts.values()),
+                        labels={'x': 'Antler Cofounder Type', 'y': 'Count'},
+                        title="Antler Cofounder Types Looking for Partners",
+                        color=list(type_counts.keys()),
+                        color_discrete_map={
+                            'Technology': '#8B5CF6',  # Purple for Technology
+                            'Business': '#F59E0B',    # Orange for Business
+                            'Domain': '#10B981'       # Green for Domain
+                        },
+                        text=list(type_counts.values())
+                    )
+                    fig_looking.update_traces(texttemplate='%{text}', textposition='outside')
+                    fig_looking.update_layout(showlegend=False, height=400)
+                    st.plotly_chart(fig_looking, use_container_width=True)
+                    
+                    # Show percentages and matching insights in columns
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**📊 Breakdown:**")
+                        total_looking = len(looking_df)
+                        total_type_counts = sum(type_counts.values())
+                        for antler_type, count in type_counts.items():
+                            percentage = (count / total_type_counts * 100) if total_type_counts > 0 else 0
+                            st.write(f"• **{antler_type}**: {count} founders ({percentage:.1f}%)")
+                    
+                    with col2:
+                        st.markdown("**🎯 Matching Opportunities:**")
+                        tech_count = type_counts.get('Technology', 0)
+                        biz_count = type_counts.get('Business', 0)
+                        domain_count = type_counts.get('Domain', 0)
                         
-                        if abs(tech_count - biz_count) > 2:  # If difference is more than 2
-                            if tech_count > biz_count:
-                                st.write("⚠️ More technical founders looking")
-                                st.write("💡 Great opportunity for business founders!")
-                            else:
-                                st.write("⚠️ More business founders looking") 
-                                st.write("💡 Great opportunity for technical founders!")
+                        if tech_count > biz_count and tech_count > domain_count:
+                            st.write("⚠️ More Technology founders looking")
+                            st.write("💡 Great opportunity for Business/Domain founders!")
+                        elif biz_count > tech_count and biz_count > domain_count:
+                            st.write("⚠️ More Business founders looking") 
+                            st.write("💡 Great opportunity for Technology/Domain founders!")
+                        elif domain_count > tech_count and domain_count > biz_count:
+                            st.write("⚠️ More Domain founders looking")
+                            st.write("💡 Great opportunity for Technology/Business founders!")
                         else:
                             st.write("✅ Balanced availability!")
                             st.write("🤝 Good matching potential")
-                
-                with col3:
-                    st.markdown("**💼 Total Available:**")
-                    st.metric("Total Available", f"{total_looking} founders", help="Total founders looking for cofounders")
-                    if total_looking > 0:
-                        cohort_percentage = (total_looking / len(filtered_df) * 100) if len(filtered_df) > 0 else 0
-                        st.write(f"({cohort_percentage:.1f}% of cohort)")
+                    
+                    with col3:
+                        st.markdown("**💼 Total Available:**")
+                        st.metric("Total Available", f"{total_looking} founders", help="Total founders looking for cofounders")
+                        if total_looking > 0:
+                            cohort_percentage = (total_looking / len(filtered_df) * 100) if len(filtered_df) > 0 else 0
+                            st.write(f"({cohort_percentage:.1f}% of cohort)")
+                else:
+                    st.info("No Antler cofounder type data available for candidates looking for cofounders")
             else:
                 st.info("No founders currently looking for cofounders with the applied filters")
         else:
-            st.info("Status or founder type information not available")
+            st.info("Status or Antler cofounder type information not available")
         
     
     with tab2:
@@ -374,13 +412,23 @@ def main():
                                 status_color = "🟢" if candidate['status'] == 'Looking for co-founder' else "🔵"
                                 status_founder_line = f"{status_color} {candidate['status']}"
                             
-                            if 'founder_type' in candidate and pd.notna(candidate['founder_type']):
-                                founder_type_emoji = "💻" if candidate['founder_type'] == 'technical' else "💼"
-                                founder_type_text = f"{founder_type_emoji} {candidate['founder_type'].title()}"
+                            if 'antler_cofounder_type' in candidate and isinstance(candidate['antler_cofounder_type'], list) and len(candidate['antler_cofounder_type']) > 0:
+                                # Handle array of antler cofounder types
+                                type_emojis = {
+                                    'Technology': '💻',
+                                    'Business': '💼', 
+                                    'Domain': '🎯'
+                                }
+                                type_texts = []
+                                for atype in candidate['antler_cofounder_type']:
+                                    emoji = type_emojis.get(atype, '🏷️')
+                                    type_texts.append(f"{emoji} {atype}")
+                                
+                                antler_type_text = " | ".join(type_texts)
                                 if status_founder_line:
-                                    status_founder_line += f" | {founder_type_text}"
+                                    status_founder_line += f" | {antler_type_text}"
                                 else:
-                                    status_founder_line = founder_type_text
+                                    status_founder_line = antler_type_text
                             
                             if status_founder_line:
                                 st.markdown(status_founder_line)

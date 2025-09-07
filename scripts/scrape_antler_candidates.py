@@ -467,6 +467,32 @@ class AntlerScraper:
         if avatar_img:
             candidate['avatar_url'] = avatar_img.get('src', '')
         
+        # Extract Antler cofounder type (Technology, Business, Domain)
+        # Try multiple approaches to find the Antler type classification
+        antler_types_set = set()  # Use set to avoid duplicates
+        
+        # Strategy 1: Look for css-10pjdbc class
+        cofounder_type_elements = container.find_all('p', class_='css-10pjdbc')
+        for type_elem in cofounder_type_elements:
+            type_text = type_elem.get_text(strip=True)
+            if type_text in ['Technology', 'Business', 'Domain']:
+                antler_types_set.add(type_text)
+        
+        # Strategy 2: Look for any element containing these exact words (if Strategy 1 didn't find anything)
+        if not antler_types_set:
+            all_elements = container.find_all(['p', 'span', 'div'])
+            for elem in all_elements:
+                elem_text = elem.get_text(strip=True)
+                if elem_text in ['Technology', 'Business', 'Domain']:
+                    # Make sure this isn't part of the skills/categories sections
+                    parent_classes = elem.parent.get('class', []) if elem.parent else []
+                    if not any('css-olbwyb' in str(cls) for cls in parent_classes):
+                        antler_types_set.add(elem_text)
+        
+        # Convert set to list and save if any types found
+        if antler_types_set:
+            candidate['antler_cofounder_type'] = sorted(list(antler_types_set))
+        
         # Extract categories/tags (about me tags)
         category_elements = container.find_all('div', class_='css-i310wq')
         if category_elements:
