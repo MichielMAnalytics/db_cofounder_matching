@@ -110,16 +110,37 @@ def main():
     status_options = ['All'] + list(df['status'].unique()) if 'status' in df.columns else ['All']
     selected_status = st.sidebar.selectbox("Team Status", status_options)
     
-    # Antler cofounder type filter
-    if 'antler_cofounder_type' in df.columns:
-        # Extract all unique types from the arrays
+    # Create a helper function to get effective cofounder type
+    def get_effective_type(row):
+        """Get cofounder type with fallback logic"""
+        types = []
+        
+        # First try antler_cofounder_type
+        if 'antler_cofounder_type' in row and isinstance(row['antler_cofounder_type'], list) and len(row['antler_cofounder_type']) > 0:
+            types = row['antler_cofounder_type']
+        # Fallback to founder_type
+        elif 'founder_type' in row and pd.notna(row['founder_type']):
+            founder_type = row['founder_type']
+            # Map founder_type to antler format
+            if founder_type in ['technical', 'technology']:
+                types = ['Technology']
+            elif founder_type == 'business':
+                types = ['Business']
+        
+        return types
+
+    # Add effective type column for filtering
+    if 'antler_cofounder_type' in df.columns or 'founder_type' in df.columns:
+        df['effective_cofounder_type'] = df.apply(get_effective_type, axis=1)
+        
+        # Extract all unique types from effective types
         all_types = []
-        for types in df['antler_cofounder_type'].dropna():
+        for types in df['effective_cofounder_type']:
             if isinstance(types, list):
                 all_types.extend(types)
         unique_types = sorted(list(set(all_types)))
         antler_type_options = ['All'] + unique_types
-        selected_antler_type = st.sidebar.selectbox("Antler Cofounder Type", antler_type_options)
+        selected_antler_type = st.sidebar.selectbox("Cofounder Type", antler_type_options)
     else:
         selected_antler_type = 'All'
     
@@ -134,9 +155,9 @@ def main():
     filtered_df = df.copy()
     if selected_status != 'All' and 'status' in df.columns:
         filtered_df = filtered_df[filtered_df['status'] == selected_status]
-    if selected_antler_type != 'All' and 'antler_cofounder_type' in df.columns:
-        # Filter based on array containing the selected type
-        mask = filtered_df['antler_cofounder_type'].apply(
+    if selected_antler_type != 'All' and 'effective_cofounder_type' in filtered_df.columns:
+        # Filter based on effective cofounder type containing the selected type
+        mask = filtered_df['effective_cofounder_type'].apply(
             lambda x: selected_antler_type in x if isinstance(x, list) else False
         )
         filtered_df = filtered_df[mask]
@@ -155,16 +176,16 @@ def main():
             st.metric("Looking for Cofounder", looking_count)
     
     with col3:
-        if 'antler_cofounder_type' in df.columns:
-            tech_mask = filtered_df['antler_cofounder_type'].apply(
+        if 'effective_cofounder_type' in filtered_df.columns:
+            tech_mask = filtered_df['effective_cofounder_type'].apply(
                 lambda x: 'Technology' in x if isinstance(x, list) else False
             )
             technical_count = tech_mask.sum()
             st.metric("Technology Founders", technical_count)
     
     with col4:
-        if 'antler_cofounder_type' in df.columns:
-            biz_mask = filtered_df['antler_cofounder_type'].apply(
+        if 'effective_cofounder_type' in filtered_df.columns:
+            biz_mask = filtered_df['effective_cofounder_type'].apply(
                 lambda x: 'Business' in x if isinstance(x, list) else False
             )
             business_count = biz_mask.sum()
@@ -207,12 +228,12 @@ def main():
                 st.info("Status information not available")
         
         with col2:
-            # Antler Cofounder type distribution bar chart
-            st.subheader("Antler Cofounder Type Distribution")
-            if 'antler_cofounder_type' in df.columns:
-                # Count occurrences of each type across all arrays
+            # Cofounder type distribution bar chart
+            st.subheader("Cofounder Type Distribution")
+            if 'effective_cofounder_type' in filtered_df.columns:
+                # Count occurrences of each type across all effective arrays
                 type_counts = {}
-                for types in filtered_df['antler_cofounder_type'].dropna():
+                for types in filtered_df['effective_cofounder_type']:
                     if isinstance(types, list):
                         for t in types:
                             type_counts[t] = type_counts.get(t, 0) + 1
@@ -221,7 +242,7 @@ def main():
                     fig_founder_type = px.bar(
                         x=list(type_counts.keys()),
                         y=list(type_counts.values()),
-                        labels={'x': 'Antler Cofounder Type', 'y': 'Count'},
+                        labels={'x': 'Cofounder Type', 'y': 'Count'},
                         color=list(type_counts.keys()),
                         color_discrete_map={
                             'Technology': '#8B5CF6',  # Purple for Technology
@@ -234,9 +255,9 @@ def main():
                     fig_founder_type.update_layout(showlegend=False, height=400)
                     st.plotly_chart(fig_founder_type, use_container_width=True)
                 else:
-                    st.info("No Antler cofounder type data available")
+                    st.info("No cofounder type data available")
             else:
-                st.info("Antler cofounder type information not available")
+                st.info("Cofounder type information not available")
         
         with col3:
             # Location distribution
@@ -263,14 +284,14 @@ def main():
         st.subheader("🤝 Available for Cofounder Matching")
         
         # Center the chart in a single column
-        if 'status' in df.columns and 'antler_cofounder_type' in df.columns:
+        if 'status' in df.columns and 'effective_cofounder_type' in filtered_df.columns:
             # Filter for those looking for cofounders
             looking_df = filtered_df[filtered_df['status'] == 'Looking for co-founder']
             
             if len(looking_df) > 0:
-                # Count antler cofounder types among those looking for cofounders
+                # Count effective cofounder types among those looking for cofounders
                 type_counts = {}
-                for types in looking_df['antler_cofounder_type'].dropna():
+                for types in looking_df['effective_cofounder_type']:
                     if isinstance(types, list):
                         for t in types:
                             type_counts[t] = type_counts.get(t, 0) + 1
@@ -330,11 +351,11 @@ def main():
                             cohort_percentage = (total_looking / len(filtered_df) * 100) if len(filtered_df) > 0 else 0
                             st.write(f"({cohort_percentage:.1f}% of cohort)")
                 else:
-                    st.info("No Antler cofounder type data available for candidates looking for cofounders")
+                    st.info("No cofounder type data available for candidates looking for cofounders")
             else:
                 st.info("No founders currently looking for cofounders with the applied filters")
         else:
-            st.info("Status or Antler cofounder type information not available")
+            st.info("Status or cofounder type information not available")
         
     
     with tab2:
@@ -412,23 +433,25 @@ def main():
                                 status_color = "🟢" if candidate['status'] == 'Looking for co-founder' else "🔵"
                                 status_founder_line = f"{status_color} {candidate['status']}"
                             
-                            if 'antler_cofounder_type' in candidate and isinstance(candidate['antler_cofounder_type'], list) and len(candidate['antler_cofounder_type']) > 0:
-                                # Handle array of antler cofounder types
+                            # Use effective cofounder type (with fallback logic)
+                            effective_types = get_effective_type(candidate)
+                            if effective_types and len(effective_types) > 0:
+                                # Handle array of cofounder types
                                 type_emojis = {
                                     'Technology': '💻',
                                     'Business': '💼', 
                                     'Domain': '🎯'
                                 }
                                 type_texts = []
-                                for atype in candidate['antler_cofounder_type']:
+                                for atype in effective_types:
                                     emoji = type_emojis.get(atype, '🏷️')
                                     type_texts.append(f"{emoji} {atype}")
                                 
-                                antler_type_text = " | ".join(type_texts)
+                                type_text = " | ".join(type_texts)
                                 if status_founder_line:
-                                    status_founder_line += f" | {antler_type_text}"
+                                    status_founder_line += f" | {type_text}"
                                 else:
-                                    status_founder_line = antler_type_text
+                                    status_founder_line = type_text
                             
                             if status_founder_line:
                                 st.markdown(status_founder_line)
