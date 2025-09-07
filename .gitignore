@@ -1,0 +1,14 @@
+.env
+*.pyc
+__pycache__/
+.DS_Store
+*.log
+venv/
+env/
+.venv/
+.idea/
+.vscode/
+*.swp
+*.swo
+chromedriver
+geckodriver
