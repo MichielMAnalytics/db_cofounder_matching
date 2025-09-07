@@ -207,7 +207,7 @@ def main():
         
         with col1:
             # Status distribution bar chart
-            st.subheader("Team Status Distribution")
+            st.subheader("Founder Status Distribution")
             if 'status' in df.columns:
                 status_counts = filtered_df['status'].value_counts()
                 fig_status = px.bar(
