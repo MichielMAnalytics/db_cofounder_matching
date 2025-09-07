@@ -198,6 +198,50 @@ def main():
     
     st.markdown("---")
     
+    # Enhanced tab styling - more visible buttons
+    st.markdown("""
+        <style>
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 12px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #2e3440;
+            padding-bottom: 0;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            height: 55px;
+            padding-left: 28px;
+            padding-right: 28px;
+            background-color: #3b4252;
+            color: #d8dee9;
+            font-size: 20px;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            margin-bottom: -2px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .stTabs [data-baseweb="tab"]:hover {
+            background-color: #4c566a;
+            color: #eceff4;
+            transform: translateY(-2px);
+        }
+        
+        .stTabs [aria-selected="true"] {
+            background-color: #5e81ac !important;
+            color: #ffffff !important;
+            border-bottom: 2px solid #5e81ac !important;
+            transform: translateY(-2px);
+        }
+        
+        .stTabs [data-baseweb="tab-panel"] {
+            padding-top: 30px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     # Main content area with tabs
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "👥 Candidates", "🎯 Skills Analysis", "📍 Location Insights"])
     
