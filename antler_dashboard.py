@@ -405,115 +405,223 @@ def main():
     with tab2:
         st.subheader("👥 Candidate Profiles")
         
-        # Search box
-        search_term = st.text_input("🔍 Search by name or skills", "")
+        # Add lunch mode checkbox and search in the same row
+        col_search, col_checkbox = st.columns([3, 1])
+        
+        with col_search:
+            # Search box with placeholder text that changes based on lunch mode
+            search_placeholder = "🔍 Search by name or skills"
+            search_term = st.text_input("Search", "", placeholder=search_placeholder, label_visibility="collapsed")
+        
+        with col_checkbox:
+            lunch_mode = st.checkbox("🍽️ Lunch Mode", help="Enable to search for multiple people at once and see expanded profiles. Perfect for lunch meetings!")
         
         # Filter candidates based on search
         display_df = filtered_df.copy()
+        
         if search_term:
-            mask = display_df['name'].str.contains(search_term, case=False, na=False)
-            if 'skills' in display_df.columns:
-                skills_mask = display_df['skills'].apply(
-                    lambda x: any(search_term.lower() in str(skill).lower() for skill in x) if isinstance(x, list) else False
-                )
-                mask = mask | skills_mask
-            display_df = display_df[mask]
+            if lunch_mode:
+                # In lunch mode, split the search term by spaces and search for each name
+                # This allows pasting multiple names at once
+                names = search_term.replace(',', ' ').split()
+                
+                # Create a mask for any name that matches
+                mask = pd.Series([False] * len(display_df))
+                for name in names:
+                    if name.strip():  # Skip empty strings
+                        name_mask = display_df['name'].str.contains(name.strip(), case=False, na=False)
+                        mask = mask | name_mask
+                
+                display_df = display_df[mask]
+            else:
+                # Normal search mode - search in name and skills
+                mask = display_df['name'].str.contains(search_term, case=False, na=False)
+                if 'skills' in display_df.columns:
+                    skills_mask = display_df['skills'].apply(
+                        lambda x: any(search_term.lower() in str(skill).lower() for skill in x) if isinstance(x, list) else False
+                    )
+                    mask = mask | skills_mask
+                display_df = display_df[mask]
         
         # Display candidates in a grid
         st.write(f"Showing {len(display_df)} candidates")
         
-        # Create columns for candidate cards
-        num_cols = 3
-        for i in range(0, len(display_df), num_cols):
-            cols = st.columns(num_cols)
-            for j, col in enumerate(cols):
-                if i + j < len(display_df):
-                    candidate = display_df.iloc[i + j]
-                    with col:
-                        # Enhanced card styling with circular profile picture
-                        st.markdown(
-                            """
-                            <style>
-                            .candidate-card {
-                                background: white;
-                                padding: 1rem;
-                                border-radius: 10px;
-                                border: 1px solid #e0e0e0;
-                                margin-bottom: 1rem;
-                            }
-                            .profile-pic {
-                                border-radius: 50%;
-                                width: 60px;
-                                height: 60px;
-                                object-fit: cover;
-                            }
-                            </style>
-                            """,
-                            unsafe_allow_html=True
-                        )
+        # Different display modes for lunch mode vs normal mode
+        if lunch_mode and len(display_df) > 0:
+            # Lunch mode: Show expanded profiles in a vertical list
+            st.markdown("### 🍽️ Lunch Group Profiles")
+            
+            for idx, candidate in display_df.iterrows():
+                # Create an expander for each person with more information
+                with st.container():
+                    # Create a card-like container with more info
+                    col_main, col_details = st.columns([1, 2])
+                    
+                    with col_main:
+                        # Profile section
+                        if 'avatar_url' in candidate and pd.notna(candidate['avatar_url']) and candidate['avatar_url']:
+                            st.markdown(
+                                f'<img src="{candidate["avatar_url"]}" style="border-radius: 50%; width: 100px; height: 100px; object-fit: cover;">',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(
+                                '<div style="width: 100px; height: 100px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 48px;">👤</div>',
+                                unsafe_allow_html=True
+                            )
                         
-                        with st.container():
-                            # Profile picture and name in horizontal layout
-                            col_avatar, col_info = st.columns([1, 4])
-                            
-                            with col_avatar:
-                                if 'avatar_url' in candidate and pd.notna(candidate['avatar_url']) and candidate['avatar_url']:
-                                    st.markdown(
-                                        f'<img src="{candidate["avatar_url"]}" class="profile-pic">',
-                                        unsafe_allow_html=True
-                                    )
-                                else:
-                                    st.markdown(
-                                        '<div style="width: 60px; height: 60px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 24px;">👤</div>',
-                                        unsafe_allow_html=True
-                                    )
-                            
-                            with col_info:
-                                st.markdown(f"**{candidate.get('name', 'Unknown')}**")
-                            
-                            # Status and founder type on the same line
-                            status_founder_line = ""
-                            if 'status' in candidate:
-                                status_color = "🟢" if candidate['status'] == 'Looking for co-founder' else "🔵"
-                                status_founder_line = f"{status_color} {candidate['status']}"
-                            
-                            # Use effective cofounder type (with fallback logic)
-                            effective_types = get_effective_type(candidate)
-                            if effective_types and len(effective_types) > 0:
-                                # Handle array of cofounder types
-                                type_emojis = {
-                                    'Technology': '💻',
-                                    'Business': '💼', 
-                                    'Domain': '🎯'
+                        st.markdown(f"### {candidate.get('name', 'Unknown')}")
+                        
+                        # Status
+                        if 'status' in candidate:
+                            status_color = "🟢" if candidate['status'] == 'Looking for co-founder' else "🔵"
+                            st.markdown(f"{status_color} **{candidate['status']}**")
+                        
+                        # Location
+                        if 'location' in candidate:
+                            st.markdown(f"📍 **Location:** {candidate.get('location', 'N/A')}")
+                    
+                    with col_details:
+                        # Cofounder type
+                        effective_types = get_effective_type(candidate)
+                        if effective_types and len(effective_types) > 0:
+                            type_emojis = {
+                                'Technology': '💻',
+                                'Business': '💼', 
+                                'Domain': '🎯'
+                            }
+                            type_texts = []
+                            for atype in effective_types:
+                                emoji = type_emojis.get(atype, '🏷️')
+                                type_texts.append(f"{emoji} {atype}")
+                            st.markdown(f"**Type:** {' | '.join(type_texts)}")
+                        
+                        # Tagline
+                        if 'tagline' in candidate and pd.notna(candidate['tagline']):
+                            st.markdown(f"**Tagline:** *{candidate['tagline']}*")
+                        
+                        # Bio/Description if available
+                        if 'bio' in candidate and pd.notna(candidate['bio']):
+                            st.markdown(f"**About:** {candidate['bio']}")
+                        elif 'description' in candidate and pd.notna(candidate['description']):
+                            st.markdown(f"**About:** {candidate['description']}")
+                        
+                        # Skills
+                        if 'skills' in candidate and isinstance(candidate['skills'], list) and len(candidate['skills']) > 0:
+                            st.markdown("**Skills:**")
+                            skills_html = ""
+                            for skill in candidate['skills'][:10]:  # Limit to 10 skills for readability
+                                skills_html += f'<span style="display: inline-block; background-color: #e8f4f8; color: #1f77b4; padding: 4px 10px; margin: 3px; border-radius: 15px; font-size: 14px; border: 1px solid #d0e8f2;">{skill}</span>'
+                            st.markdown(skills_html, unsafe_allow_html=True)
+                        
+                        # LinkedIn if available
+                        if 'linkedin' in candidate and pd.notna(candidate['linkedin']):
+                            st.markdown(f"🔗 [LinkedIn Profile]({candidate['linkedin']})")
+                        
+                        # Email if available  
+                        if 'email' in candidate and pd.notna(candidate['email']):
+                            st.markdown(f"✉️ **Email:** {candidate['email']}")
+                        
+                        # Categories if available
+                        if 'categories' in candidate and isinstance(candidate['categories'], list) and len(candidate['categories']) > 0:
+                            st.markdown(f"**Industries:** {', '.join(candidate['categories'][:5])}")
+                    
+                    st.markdown("---")
+        
+        else:
+            # Normal mode: Display in grid as before
+            # Create columns for candidate cards
+            num_cols = 3
+            for i in range(0, len(display_df), num_cols):
+                cols = st.columns(num_cols)
+                for j, col in enumerate(cols):
+                    if i + j < len(display_df):
+                        candidate = display_df.iloc[i + j]
+                        with col:
+                            # Enhanced card styling with circular profile picture
+                            st.markdown(
+                                """
+                                <style>
+                                .candidate-card {
+                                    background: white;
+                                    padding: 1rem;
+                                    border-radius: 10px;
+                                    border: 1px solid #e0e0e0;
+                                    margin-bottom: 1rem;
                                 }
-                                type_texts = []
-                                for atype in effective_types:
-                                    emoji = type_emojis.get(atype, '🏷️')
-                                    type_texts.append(f"{emoji} {atype}")
+                                .profile-pic {
+                                    border-radius: 50%;
+                                    width: 60px;
+                                    height: 60px;
+                                    object-fit: cover;
+                                }
+                                </style>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            
+                            with st.container():
+                                # Profile picture and name in horizontal layout
+                                col_avatar, col_info = st.columns([1, 4])
                                 
-                                type_text = " | ".join(type_texts)
+                                with col_avatar:
+                                    if 'avatar_url' in candidate and pd.notna(candidate['avatar_url']) and candidate['avatar_url']:
+                                        st.markdown(
+                                            f'<img src="{candidate["avatar_url"]}" class="profile-pic">',
+                                            unsafe_allow_html=True
+                                        )
+                                    else:
+                                        st.markdown(
+                                            '<div style="width: 60px; height: 60px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 24px;">👤</div>',
+                                            unsafe_allow_html=True
+                                        )
+                                
+                                with col_info:
+                                    st.markdown(f"**{candidate.get('name', 'Unknown')}**")
+                                
+                                # Status and founder type on the same line
+                                status_founder_line = ""
+                                if 'status' in candidate:
+                                    status_color = "🟢" if candidate['status'] == 'Looking for co-founder' else "🔵"
+                                    status_founder_line = f"{status_color} {candidate['status']}"
+                                
+                                # Use effective cofounder type (with fallback logic)
+                                effective_types = get_effective_type(candidate)
+                                if effective_types and len(effective_types) > 0:
+                                    # Handle array of cofounder types
+                                    type_emojis = {
+                                        'Technology': '💻',
+                                        'Business': '💼', 
+                                        'Domain': '🎯'
+                                    }
+                                    type_texts = []
+                                    for atype in effective_types:
+                                        emoji = type_emojis.get(atype, '🏷️')
+                                        type_texts.append(f"{emoji} {atype}")
+                                    
+                                    type_text = " | ".join(type_texts)
+                                    if status_founder_line:
+                                        status_founder_line += f" | {type_text}"
+                                    else:
+                                        status_founder_line = type_text
+                                
                                 if status_founder_line:
-                                    status_founder_line += f" | {type_text}"
-                                else:
-                                    status_founder_line = type_text
-                            
-                            if status_founder_line:
-                                st.markdown(status_founder_line)
-                            
-                            if 'location' in candidate:
-                                st.markdown(f"📍 {candidate.get('location', 'N/A')}")
-                            
-                            if 'tagline' in candidate and pd.notna(candidate['tagline']):
-                                st.markdown(f"*{candidate['tagline']}*")
-                            
-                            if 'skills' in candidate and isinstance(candidate['skills'], list):
-                                # Create skills badges
-                                skills_html = ""
-                                for skill in candidate['skills']:
-                                    skills_html += f'<span style="display: inline-block; background-color: #e8f4f8; color: #1f77b4; padding: 2px 8px; margin: 2px; border-radius: 12px; font-size: 12px; border: 1px solid #d0e8f2;">{skill}</span>'
-                                st.markdown(skills_html, unsafe_allow_html=True)
-                            
-                            st.markdown("---")
+                                    st.markdown(status_founder_line)
+                                
+                                if 'location' in candidate:
+                                    st.markdown(f"📍 {candidate.get('location', 'N/A')}")
+                                
+                                if 'tagline' in candidate and pd.notna(candidate['tagline']):
+                                    st.markdown(f"*{candidate['tagline']}*")
+                                
+                                if 'skills' in candidate and isinstance(candidate['skills'], list):
+                                    # Create skills badges
+                                    skills_html = ""
+                                    for skill in candidate['skills']:
+                                        skills_html += f'<span style="display: inline-block; background-color: #e8f4f8; color: #1f77b4; padding: 2px 8px; margin: 2px; border-radius: 12px; font-size: 12px; border: 1px solid #d0e8f2;">{skill}</span>'
+                                    st.markdown(skills_html, unsafe_allow_html=True)
+                                
+                                st.markdown("---")
     
     with tab3:
         st.subheader("🎯 Skills Analysis")

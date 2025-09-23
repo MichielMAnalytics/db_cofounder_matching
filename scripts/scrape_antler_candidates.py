@@ -371,6 +371,10 @@ class AntlerScraper:
             for container in profile_containers:
                 candidate_data = self.extract_full_candidate_info(container)
                 if candidate_data and candidate_data.get('name'):
+                    # Skip test account
+                    if candidate_data['name'] == 'Chris (Test) Klam':
+                        print("Skipping test account: Chris (Test) Klam")
+                        continue
                     candidates.append(candidate_data)
         
         # Fallback: Try the original name-only approach
@@ -382,6 +386,14 @@ class AntlerScraper:
                 print(f"Found {len(name_elements)} candidate names")
                 for elem in name_elements:
                     name_text = elem.get_text(strip=True)
+                    # Skip test account
+                    if name_text == 'Chris (Test) Klam':
+                        print("Skipping test account: Chris (Test) Klam")
+                        continue
+                    # Normalize "Michiel(you)" to "Michiel Voortman"
+                    if name_text == 'Michiel(you)':
+                        name_text = 'Michiel Voortman'
+                        print("Found 'Michiel(you)' - normalizing to 'Michiel Voortman'")
                     candidates.append({
                         'name': name_text,
                         'scraped_at': datetime.now(timezone.utc),
@@ -420,7 +432,12 @@ class AntlerScraper:
         # Extract name (css-5gltw class)
         name_elem = container.find('p', class_='css-5gltw')
         if name_elem:
-            candidate['name'] = name_elem.get_text(strip=True)
+            name = name_elem.get_text(strip=True)
+            # Normalize "Michiel(you)" to "Michiel Voortman"
+            if name == 'Michiel(you)':
+                name = 'Michiel Voortman'
+                print("Found 'Michiel(you)' - normalizing to 'Michiel Voortman'")
+            candidate['name'] = name
         
         # Extract tagline/description (css-1s1jbr2 class)
         tagline_elem = container.find('p', class_='css-1s1jbr2')
@@ -508,33 +525,37 @@ class AntlerScraper:
         
         return candidate if candidate.get('name') else None
         
-    def navigate_to_next_page(self) -> bool:
+    def navigate_to_next_page(self, current_page: int) -> bool:
         """
         Navigate to the next page of results
+        
+        Args:
+            current_page: The current page number
         
         Returns:
             True if navigation successful, False otherwise
         """
         try:
-            print("Looking for next page button...")
+            next_page = current_page + 1
+            print(f"Looking for page {next_page} button...")
             
-            # Strategy 1: Look for button with text "2"
+            # Strategy 1: Look for button with specific next page number
             try:
-                page_2_button = self.driver.find_element(By.XPATH, "//button[.//div[text()='2']]")
-                if page_2_button.is_enabled() and page_2_button.is_displayed():
-                    print("Found page 2 button, clicking...")
-                    page_2_button.click()
+                next_page_button = self.driver.find_element(By.XPATH, f"//button[.//div[text()='{next_page}']]")
+                if next_page_button.is_enabled() and next_page_button.is_displayed():
+                    print(f"Found page {next_page} button, clicking...")
+                    next_page_button.click()
                     time.sleep(4)
                     return True
             except:
                 pass
             
-            # Strategy 2: Look for any button containing "2"
+            # Strategy 2: Look for any button containing the next page number
             try:
-                buttons_with_2 = self.driver.find_elements(By.XPATH, "//button[contains(text(), '2')]")
-                for button in buttons_with_2:
+                buttons_with_next_page = self.driver.find_elements(By.XPATH, f"//button[contains(text(), '{next_page}')]")
+                for button in buttons_with_next_page:
                     if button.is_enabled() and button.is_displayed():
-                        print("Found button with '2', clicking...")
+                        print(f"Found button with '{next_page}', clicking...")
                         button.click()
                         time.sleep(4)
                         return True
@@ -546,14 +567,14 @@ class AntlerScraper:
                 next_buttons = self.driver.find_elements(By.XPATH, "//button[contains(@class, 'pagination') or contains(@aria-label, 'next') or contains(@class, 'next')]")
                 for button in next_buttons:
                     if button.is_enabled() and button.is_displayed():
-                        print("Found next page button, clicking...")
+                        print("Found next page arrow button, clicking...")
                         button.click()
                         time.sleep(4)
                         return True
             except:
                 pass
             
-            print("No next page button found")
+            print(f"No page {next_page} button found")
             return False
             
         except Exception as e:
@@ -624,20 +645,21 @@ class AntlerScraper:
             for page_num in range(1, max_pages + 1):
                 print(f"\n--- Scraping page {page_num} ---")
                 
-                if page_num == 1:
-                    if not self.wait_for_candidates_to_load():
-                        print("Failed to load candidates on first page")
-                        break
+                # Wait for candidates to load on every page, not just the first
+                if not self.wait_for_candidates_to_load():
+                    print(f"Failed to load candidates on page {page_num}")
+                    break
                         
                 candidates = self.scrape_current_page()
                 print(f"Found {len(candidates)} candidates on page {page_num}")
                 all_candidates.extend(candidates)
                 
                 if page_num < max_pages:
-                    if not self.navigate_to_next_page():
+                    if not self.navigate_to_next_page(page_num):
                         print(f"Could not navigate to page {page_num + 1}. Stopping.")
                         break
-                    time.sleep(2)
+                    # Give extra time after navigation for the page to start loading
+                    time.sleep(3)
                     
             print(f"\n--- Scraping Complete ---")
             print(f"Total candidates found: {len(all_candidates)}")
